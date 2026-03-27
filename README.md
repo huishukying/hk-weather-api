@@ -1,6 +1,6 @@
 # Hong Kong Weather API
 
-A FastAPI-based REST API providing real-time weather data from Hong Kong Observatory.
+A REST API providing real-time weather data from the Hong Kong Observatory. Built with FastAPI and PostgreSQL, fully containerized with Docker.
 
 ## Features
 - Real-time temperature, rainfall, and forecast data
@@ -12,9 +12,6 @@ A FastAPI-based REST API providing real-time weather data from Hong Kong Observa
 - **Backend**: FastAPI, Python 3.11
 - **Database**: PostgreSQL with SQLAlchemy
 - **Authentication**: PBKDF2 password hashing
-- **Deployment**: Railway
-
-## Local Development
 
 ### Prerequisites
 - Python 3.11+
@@ -25,5 +22,6 @@ A FastAPI-based REST API providing real-time weather data from Hong Kong Observa
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/hk-weather-api.git
+git clone https://github.com/huishukying/hk-weather-api.git
 cd hk-weather-api
+docker-compose up -d
