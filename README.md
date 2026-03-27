@@ -12,6 +12,7 @@ A REST API providing real-time weather data from the Hong Kong Observatory. Buil
 - **Backend**: FastAPI, Python 3.11
 - **Database**: PostgreSQL with SQLAlchemy
 - **Authentication**: PBKDF2 password hashing
+- **Containerization**: Docker, Docker Compose
 
 ### Prerequisites
 - Python 3.11+
