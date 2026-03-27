@@ -1,0 +1,8 @@
+venv
+__pycache__
+*.pyc
+.env
+.git
+README.md
+Procfile
+railway.json
