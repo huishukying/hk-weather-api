@@ -22,8 +22,8 @@ A REST API providing real-time weather data from the Hong Kong Observatory. Buil
 
 ### Run with Docker Compose
 
-#Clone the repository:
 ```bash
+# Clone the repository
 git clone https://github.com/huishukying/hk-weather-api.git
 cd hk-weather-api
 docker-compose up -d
