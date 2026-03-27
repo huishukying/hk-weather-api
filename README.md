@@ -17,12 +17,16 @@ A REST API providing real-time weather data from the Hong Kong Observatory. Buil
 ### Prerequisites
 - Python 3.11+
 - PostgreSQL
+- Docker
 - Git
 
-### Setup
+### Run with Docker Compose
 
-1. Clone the repository:
+#Clone the repository:
 ```bash
 git clone https://github.com/huishukying/hk-weather-api.git
 cd hk-weather-api
 docker-compose up -d
+
+#Access the API
+Open http://localhost:8000/docs in your browser
