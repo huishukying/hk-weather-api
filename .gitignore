@@ -1,17 +1,12 @@
-# Python
 __pycache__/
-*.py[cod]
-*.so
+*.pyc
+
 venv/
 .env
 
-# IDE
+postgres-data/
+
 .vscode/
 .idea/
 
-# OS
 .DS_Store
-
-# Deployment
-# Procfile
-# railway.json

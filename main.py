@@ -1,14 +1,13 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends
 import requests
 from typing import List, Optional
 import time
 from database import get_db, engine
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from pydantic import BaseModel
 from datetime import datetime
-from auth import hash_password
-from models import User, Base, WeatherLog
+from auth import hash_password, create_token, verify_token, verify_password
+from models import User, Base
 from fastapi.middleware.cors import CORSMiddleware
 
 Base.metadata.create_all(bind=engine)
@@ -26,6 +25,10 @@ class UserResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 app = FastAPI(
     title="Hong Kong Weather API",
@@ -45,7 +48,6 @@ weather_cache = {}
 CACHE_DURATION = 300  
 
 def get_hko_data(data_type: str = "rhrread") -> dict:
-    
     cache_key = data_type
     current_time = time.time()
 
@@ -61,9 +63,7 @@ def get_hko_data(data_type: str = "rhrread") -> dict:
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
-
         weather_cache[cache_key] = (current_time, data)
-        
         return data
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=503, detail=f"HKO service unavailable: {str(e)}")
@@ -80,8 +80,6 @@ def home():
             "/temperature/current": "Current temperatures from all stations",
             "/temperature/{station}": "Temperature for specific station",
             "/rainfall": "Current rainfall data",
-            "/humidity": "Current humidity data",
-            "/warnings": "Weather warnings",
             "/forecast": "9-day forecast",
             "/cache/clear": "Clear API cache"
         },
@@ -114,24 +112,39 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     
     return new_user
 
+@app.post("/login")
+def login(user_creds: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == user_creds.username).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username"
+        )
+    if not verify_password(user_creds.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid password"
+        )
+
+    token = create_token(user.username)
+    
+    return {"access_token": token, "token_type": "bearer"}
+
 @app.get("/health")
 def health_check():
     try:
-        test_data = get_hko_data("rhrread")
-        
+        get_hko_data("rhrread")
         return {
-            "status": "healthy",
-            "hko_service": "available",
-            "cache_size": len(weather_cache),
-            "timestamp": time.time()
+            "status": "healthy", 
+            "hko_service": "available", 
+            "cache_size": len(weather_cache)
         }
     except Exception as e:
         return {
-            "status": "degraded",
-            "hko_service": "unavailable",
-            "error": str(e),
-            "timestamp": time.time()
-        }
+            "status": "degraded", 
+            "hko_service": "unavailable", 
+            "error": str(e)}
 
 @app.get("/temperature/current")
 def get_current_temperatures():
@@ -166,7 +179,7 @@ def get_station_temperature(station_name: str):
     
     data = get_hko_data("rhrread")
     temp_data = data.get("temperature", {}).get("data", [])
-    
+
     station_name_lower = station_name.lower()
     
     for station in temp_data:
@@ -193,30 +206,12 @@ def get_rainfall_data():
     data = get_hko_data("rhrread")
     rainfall_data = data.get("rainfall", {}).get("data", [])
 
-    raining_places = [
-        {
-            "district": item.get("place"),
-            "rainfall": item.get("max", 0),
-            "unit": item.get("unit", "mm")
-        }
-        for item in rainfall_data
-        if item.get("max", 0) > 0
-    ]
-
     return {
         "timestamp": data.get("iconUpdateTime", ""),
         "total_stations": len(rainfall_data),
-        "stations_with_rain": len(raining_places),
-        "raining_places": raining_places,
-        "all_stations": [
-            {
-                "district": item.get("place"),
-                "rainfall": item.get("max", 0),
-                "unit": item.get("unit", "mm")
-            }
-            for item in rainfall_data
-        ]
+        "stations": rainfall_data
     }
+
 
 @app.get("/forecast")
 def get_forecast(days: Optional[int] = None):
@@ -247,7 +242,6 @@ def get_forecast(days: Optional[int] = None):
 
 @app.delete("/cache/clear")
 def clear_cache():
-    """Clear the API cache"""
     cleared_count = len(weather_cache)
     weather_cache.clear()
     return {
@@ -261,39 +255,54 @@ def cache_status():
         "cached_items": len(weather_cache),
         "cached_keys": list(weather_cache.keys()),
         }
-    
-@app.get("/db/users")
-def get_users(db: Session = Depends(get_db)):
-    """Get all users from database"""
-    result = db.execute(text("SELECT * FROM users"))
-    users = result.fetchall()
-    
-    return [
-        {"id": u[0], "name": u[1], "email": u[2]}
-        for u in users
-    ]
 
-@app.get("/db/weather")
-def get_weather_logs(db: Session = Depends(get_db)):
-    result = db.execute(text("SELECT * FROM weather_logs ORDER BY recorded_at DESC"))
-    logs = result.fetchall()
+def get_current_user_from_token(request: Request, db: Session = Depends(get_db)):
+    auth_header = request.headers.get("Authorization")
+
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="No authorization header")
     
-    return [
-        {
-            "location": log[1],
-            "temperature": log[2],
-            "recorded_at": log[3]
-        }
-        for log in logs
-    ]
+    parts = auth_header.split(" ")
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Invalid authorization header format. Use: Bearer <token>")
+
+    token = parts[1]
+    username = verify_token(token)
+
+    if not username:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user = db.query(User).filter(User.username == username).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return user
+
+@app.get("/protected")
+def protected_endpoint(user = Depends(get_current_user_from_token)):
+    return {
+        "message": f"{user.username} is authenticated",
+        "user_id": user.id,
+        "token_valid": True
+    }
 
 @app.get("/users", response_model=List[UserResponse])
-def get_all_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_all_users(
+    skip: int = 0, 
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token)
+):
     users = db.query(User).offset(skip).limit(limit).all()
     return users
 
 @app.get("/users/{user_id}", response_model=UserResponse)
-def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
+def get_user_by_id(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token)
+):
     user = db.query(User).filter(User.id == user_id).first()
     
     if not user:

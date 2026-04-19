@@ -15,7 +15,7 @@ services:
       - mynetwork
 
   api:
-    build: .
+    image: huishukying/hk-weather-api:latest  
     container_name: weather-api
     restart: unless-stopped
     ports:
