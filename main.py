@@ -4,7 +4,7 @@ from typing import List, Optional
 import time
 from database import get_db, engine
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from auth import hash_password, create_token, verify_token, verify_password
 from models import User, Base
@@ -23,8 +23,7 @@ class UserResponse(BaseModel):
     username: str
     created_at: datetime  
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LoginRequest(BaseModel):
     username: str
